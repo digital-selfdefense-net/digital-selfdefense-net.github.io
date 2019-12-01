@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Hackerspace, Infosec Community, IT Security, Cyber Security, Information Security, Ethical Hacking, Penetration Testing, Web Application Security, Network Security, Cryptography, Security Research, Malware Analysis, Threat Intelligence, OSINT, OPSEC, Reverse Engineering, Exploit Development, DFIR, Forensics, Incident Response, SOC, CSIRT">
+    <meta name="author" content="anonymous">
+    <title>Digital Self-Defense Lab - Do it yourself Privacy Phone</title>
+    <link href="/assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css?family=Saira+Extra+Condensed:500,700" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css?family=Muli:400,400i,800,800i" rel="stylesheet">
+    <link href="/assets/vendor/fontawesome-free/css/all.min.css" rel="stylesheet">
+    <link href="/assets/css/main.min.css" rel="stylesheet">
+    <link rel="shortcut icon" href="/assets/img/favicon.ico">
+    <link rel="icon" type="image/png" href="/assets/img/favicon-32x32.png" sizes="32x32">
+    <link rel="icon" type="image/png" href="/assets/img/favicon-96x96.png" sizes="96x96">
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/img/apple-touch-icon.png">
+  </head>
+  <body id="page-top">
+    <div class="container-fluid p-0">
+      <section class="main-section p-3 p-lg-5 d-flex align-items-center" id="blog">
+        <div class="w-100">
+          <article class="lead">
+            <header class="mb-4">
+              <h2>Do it yourself Privacy Phone</h2>
+              <time datetime="2019-11-30T11:00:01+01:00" class="text-primary">Posted on 30 Nov 2019 by anonymous</time>
+            </header>
+            <p>Who doesn’t know that feeling? You are frustrated because you have said the word “OK” and then all of a sudden the “Google Assistant” appears. You scroll through social networks and wonder why Facebook offers you the shoes you just talked about 5 minutes ago. Then you read another article about how apps with third-party libraries like Baidu<sup id="fnref:fn-baidu"><a href="#fn:fn-baidu" class="footnote">1</a></sup> trick the whole Android operating system and can access your camera, microphone, etc. at any time. The picture of the frustrated Android user worrying about his digital privacy is now complete.</p>
+            <p>I was that Android user few years ago before I decided to fight back in order to regain my privacy. If you now think that this is another tutorial on how to install a custom ROM without “Google Services” then I have to disappoint you. What I really wanted at that time was a hardware solution that wouldn’t contain any spying hardware like GPS, camera and microphone. I chose the Nexus 5X<sup id="fnref:fn-nexus_5x"><a href="#fn:fn-nexus_5x" class="footnote">2</a></sup> because CopperheadOS<sup id="fnref:fn-copperhead"><a href="#fn:fn-copperhead" class="footnote">3</a></sup> offers free ROMs for this device and there a some good tutorials on how to remove the spying parts. Without further ado, I read a Nexus 5X teardown and picked the components I wanted to remove.</p>
+            <h2 id="disclaimer">Disclaimer</h2>
+            <p>I’m not responsible for bricked devices, dead SD Cards or thermonuclear war. Please do some research if you have any concerns about the steps presented in this tutorial!</p>
+            <ul>
+              <li>YOU are choosing to make these modifications, and if you point the finger at me for messing up your device, I will laugh at you.</li>
+              <li>YOUR warranty will be void if you tamper with any part of your device / software.</li>
+            </ul>
+            <h2 id="introduction">Introduction</h2>
+            <p>Finally, the used LG Nexus 5X that I bought online arrived in the mail and it was time to convert it into a privacy phone. Before we start I wanted to say sorry for the blurry pictures! I had way too much coffee that day and my hands were constantly shaking. In the next steps I will show you what needs to be done in order to get rid of the spy components.</p>
+            <p><img src="/assets/uploads/2019/11/post2/images/1.jpg" alt="Figure 1: LG Nexus 5X" title="LG Nexus 5X" /></p>
+            <p>Besides the phone you will need some tools like the iFixit Toolkit<sup id="fnref:fn-iFixit"><a href="#fn:fn-iFixit" class="footnote">4</a></sup> (or something similar) in order to follow the steps presented below.</p>
+            <h2 id="teardown">Teardown</h2>
+            <p>Step 1: Remove the backcover</p>
+            <p><img src="/assets/uploads/2019/11/post2/images/2.jpg" alt="Figure 2: Remove the backcover" title="Remove the backcover" /></p>
+            <p>Step 2: Remove all screws:</p>
+            <p><img src="/assets/uploads/2019/11/post2/images/3.png" alt="Figure 3: Remove all screws" title="Remove all screws" /></p>
+            <p>Step 3: Remove the middle frame:</p>
+            <p><img src="/assets/uploads/2019/11/post2/images/4.png" alt="Figure 4: Remove the middle frame" title="Remove the middle frame" /></p>
+            <p>Step 4: Remove the three microphones:</p>
+            <p><img src="/assets/uploads/2019/11/post2/images/5.png" alt="Figure 5: Remove the three microphones" title="Remove the three microphones" />
+              <img src="/assets/uploads/2019/11/post2/images/6.png" alt="Figure 6: Remove the three microphones" title="Remove the three microphones" /></p>
+            <p>Step 5: Remove GPS, I don’t know the exact name for this little thing:</p>
+            <p><img src="/assets/uploads/2019/11/post2/images/7.png" alt="Figure 7: Remove GPS" title="Remove GPS" /></p>
+            <p>Step 6: Remove the front- and back camera:</p>
+            <p><img src="/assets/uploads/2019/11/post2/images/8.png" alt="Figure 8: Remove the front- and back camera" title="Remove the front- and back camera" />
+              <img src="/assets/uploads/2019/11/post2/images/9.png" alt="Figure 9: Remove the front- and back camera" title="Remove the front- and back camera" /></p>
+            <p>Step 7: Reassemble everything, flash a ROM of your choice (I recommend CopperheadOS) and you’re done!</p>
+            <hr />
+            <p>Want to see something else added? <a href="https://github.com/digital-selfdefense-net/digital-selfdefense-net.github.io/issues/new">Open an issue.</a></p>
+            <div class="footnotes">
+              <ol>
+                <li id="fn:fn-baidu">
+                  <p><a href="https://www.ftc.gov/system/files/documents/public_events/1415032/privacycon2019_serge_egelman.pdf">50 Ways to Leak Your Data</a> <a href="#fnref:fn-baidu" class="reversefootnote">&#8617;</a></p>
+                </li>
+                <li id="fn:fn-nexus_5x">
+                  <p><a href="https://en.wikipedia.org/wiki/Nexus_5X">Nexus 5X</a> <a href="#fnref:fn-nexus_5x" class="reversefootnote">&#8617;</a></p>
+                </li>
+                <li id="fn:fn-copperhead">
+                  <p><a href="https://copperhead.co/">CopperheadOS</a> <a href="#fnref:fn-copperhead" class="reversefootnote">&#8617;</a></p>
+                </li>
+                <li id="fn:fn-iFixit">
+                  <p><a href="https://gizmodo.com/this-cheap-20-toolkit-can-open-99-percent-of-your-gadg-1789224245">iFixit</a> <a href="#fnref:fn-iFixit" class="reversefootnote">&#8617;</a></p>
+                </li>
+              </ol>
+            </div>
+            <footer>
+              <aside class="mt-5">
+                <h3>Related posts</h3>
+                <ul>
+                  <li>
+                    <a href="/2019/11/30/Battlefield-Malware-Analysis.html">
+                      Battlefield Malware Analysis (Part 1)
+                      <small><time class="text-primary" datetime="2019-11-30T11:00:02+01:00">30 Nov 2019</time></small>
+                    </a>
+                  </li>
+                  <li>
+                    <a href="/2019/11/30/Hello-World.html">
+                      Hello, World!
+                      <small><time class="text-primary" datetime="2019-11-30T11:00:00+01:00">30 Nov 2019</time></small>
+                    </a>
+                  </li>
+                </ul>
+              </aside>
+              <hr class="m-2">
+              <div class="pagination-wrapper">
+                <div class="pagination">
+                  <a class="pagination-step" href="/">Back home</a>
+                  <a class="pagination-step" href="/blog/">More posts</a>
+                </div>
+              </div>
+            </footer>
+          </article>
+        </div>
+      </section>
+    </div>
+    <div class="container-fluid p-0">
+      <footer class="global-footer">
+        <p class="m-0 text-center text-white">Copyright &copy; 2019, Digital Self-Defense Lab</p>
+      </footer>
+    </div>
+    <script src="/assets/vendor/jquery/jquery.min.js"></script>
+    <script src="/assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script src="/assets/vendor/jquery-easing/jquery.easing.min.js"></script>
+    <script src="/assets/js/main.min.js"></script>
+  </body>
+</html>
