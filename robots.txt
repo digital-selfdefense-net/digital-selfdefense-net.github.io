@@ -1,2 +1,4 @@
 User-Agent: *
 Allow: /
+
+Sitemap: https://www.digital-selfdefense.net/sitemap.xml
